@@ -3,6 +3,7 @@ import pyspark
 from pyspark.sql import SparkSession
 from pyspark.ml.feature import StandardScaler
 from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.classification import RandomForestClassificationModel 
 
 sc = SparkSession.builder.appName("Steel faults prediction").getOrCreate() 
 
@@ -10,7 +11,6 @@ class SteelFaultPredictor():
     # constructor 
     def __init__(self):
         self.parsed = []
-        self.preprocessed = []
         self.prediction = None
     
     # class methods 
@@ -26,7 +26,7 @@ class SteelFaultPredictor():
         for i in input.keys(): 
             if i in features: 
                 x = input.get(i).get('value')
-                print(x)
+                #print(x)
                 self.parsed.append(x)
         print(self.parsed)
 
@@ -50,31 +50,47 @@ class SteelFaultPredictor():
                                   'Edges_Index','Empty_Index','Square_Index','Outside_X_Index','Edges_X_Index',
                                   'Edges_Y_Index','Outside_Global_Index','LogOfAreas','Log_X_Index','Log_Y_Index',
                                   'Orientation_Index','Luminosity_Index','SigmoidOfAreas'], 
-                            outputCol="assembled_features")
+                            outputCol="features")
         vector_df = assembler.transform(df)
-        
-        # Scale features to have zero mean and unit standard deviation
-        standarizer = StandardScaler(withMean=True, withStd=True,
-                                    inputCol="assembled_features",
-                                    outputCol="features")
-        model = standarizer.fit(vector_df)
-        feat = model.transform(vector_df)
-        feat.printSchema()
-        return feat
+        return vector_df
+    
+    def predict(self,test): 
 
+        #load the trained model
+        modelDir= "Prediction/Trained_model"   
+        rff = RandomForestClassificationModel.load(modelDir)
+
+        tes = rff.transform(test)
+        #print(type(tes))
+        #print(tes.columns)
         
-                
+        #tes.write.parquet("tested")
+        #tes.select("prediction").toPandas().head()
+        
+        x = tes["prediction"]
+        return x
+        
+
+        #TODO: 
+        # getting the load to a fomat as the normalized ngsi-ld ( without this u )
+        # merging the codes
+        # remove the standard scaler 
+        # getting the prediction label ( integer)
+        # creating a function which gives the corrsponding label ( string ) of my predicted integer label
+        # updating the ngsi-ld content                 
 
             
 if __name__ == '__main__':
 
-    with open('./Data/ngsi-ld-data.json') as json_file:
+    with open('Prediction/Data/ngsi-ld-data.json') as json_file:
         data = json.load(json_file)  
 
     pred = SteelFaultPredictor()
     x = pred.parse_json(data)
     DF=pred.create_spark_dataframe()
     print(type(DF))
-    DF.printSchema()
-    pred.preprocess(DF)
+    #DF.printSchema()
+    df= pred.preprocess(DF)
+    x = pred.predict(df) 
+    
     print("done!")
